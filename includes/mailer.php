@@ -40,11 +40,11 @@ function send_welcome_letter(
          * ---------------------------------------------------------------------
          */
         $mail->isSMTP();
-        $mail->Host       = 'smtp.example.com';
-        $mail->Port       = 587;
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'smtp-user@example.com';
-        $mail->Password   = 'your-password';
+        $mail->Host       = SMTP_HOST;
+        $mail->Port       = SMTP_PORT;
+        $mail->SMTPAuth   = SMTP_AUTH;
+        $mail->Username   = SMTP_USER;
+        $mail->Password   = SMTP_PASS;
 
         // Encryption: tls (587) or ssl (465)
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;

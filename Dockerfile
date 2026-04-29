@@ -17,7 +17,7 @@ COPY public/ ./public/
 COPY includes/ ./includes/
 
 # Create expected mount points
-RUN mkdir -p ./templates ./includes/vendor/phpmailer
+RUN mkdir -p ./templates ./includes/vendor/phpmailer ./config
 
 # Install PHPMailer manually
 RUN wget -q -O includes/vendor/phpmailer/PHPMailer.php https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/PHPMailer.php \

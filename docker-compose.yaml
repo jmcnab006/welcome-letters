@@ -7,7 +7,8 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./config.php:/var/www/html/includes/config.php:ro
+      - ./config/letters.php:/var/www/html/config/letters.php:ro
+      - ./config/config.php:/var/www/html/config/config.php:ro
       - ./templates:/var/www/html/templates:ro
     environment:
       TZ: America/Chicago
