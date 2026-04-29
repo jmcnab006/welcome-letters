@@ -1,0 +1,36 @@
+<h2>Welcome {{ customer_name }}!</h2>
+
+<p>Your DNS hosting service has been successfully provisioned.</p>
+
+<h3>Update Your Nameservers</h3>
+
+<ul>
+    <li><strong>{{ nameserver_1 }}</strong></li>
+    <li><strong>{{ nameserver_2 }}</strong></li>
+</ul>
+
+<p>DNS changes may take up to 24–48 hours to propagate.</p>
+
+{% if admin_portal_url %}
+<h3>Admin Portal</h3>
+<p>
+    <a href="{{ admin_portal_url }}">{{ admin_portal_url }}</a>
+</p>
+{% endif %}
+
+{% if admin_username %}
+<p>
+    <strong>Username:</strong> {{ admin_username }}<br>
+    <strong>Password:</strong> {{ admin_password }}
+</p>
+{% endif %}
+
+<hr>
+
+<p>
+    Need help? Contact us at
+    <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+    or call {{ support_phone }}.
+</p>
+
+<p>— {{ company_name }}</p>
