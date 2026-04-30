@@ -137,52 +137,6 @@ function render_letter_template(string $templateName, array $values): string
     return render_jinja_like($template, $values, true);
 }
 
-function render_jinja_like(string $template, array $values, bool $escapeHtml = true): string
-{
-    /*
-     * Supports:
-     *   {{ variable }}
-     *   {% if variable %}...{% endif %}
-     *   {% if variable %}...{% else %}...{% endif %}
-     *
-     * This is intentionally small and safe.
-     * It is not full Jinja/Twig.
-     */
-
-    $previous = null;
-
-    while ($previous !== $template) {
-        $previous = $template;
-
-        $template = preg_replace_callback(
-            '/{%\s*if\s+([a-zA-Z0-9_\-]+)\s*%}(.*?)(?:{%\s*else\s*%}(.*?))?{%\s*endif\s*%}/s',
-            function (array $matches) use ($values, $escapeHtml): string {
-                $key = $matches[1];
-                $ifBlock = $matches[2];
-                $elseBlock = $matches[3] ?? '';
-
-                $value = $values[$key] ?? null;
-
-                return !empty($value)
-                    ? render_jinja_like($ifBlock, $values, $escapeHtml)
-                    : render_jinja_like($elseBlock, $values, $escapeHtml);
-            },
-            $template
-        );
-    }
-
-    return preg_replace_callback(
-        '/{{\s*([a-zA-Z0-9_\-]+)\s*}}/',
-        function (array $matches) use ($values, $escapeHtml): string {
-            $key = $matches[1];
-            $value = (string) ($values[$key] ?? '');
-
-            return $escapeHtml ? nl2br(e($value)) : $value;
-        },
-        $template
-    );
-}
-
 function html_to_plain_text(string $html): string
 {
     $text = $html;
@@ -221,4 +175,152 @@ function apply_autofill_values(array $letter, array $submitted): array
     }
 
     return $submitted;
+}
+
+function render_jinja_like(string $template, array $values, bool $escapeHtml = true): string
+{
+    $template = render_includes($template, $values, $escapeHtml);
+    $template = render_for_blocks($template, $values, $escapeHtml);
+    $template = render_if_blocks($template, $values, $escapeHtml);
+
+    return render_variables($template, $values, $escapeHtml);
+}
+
+function render_includes(string $template, array $values, bool $escapeHtml): string
+{
+    return preg_replace_callback(
+        '/{%\s*include\s+[\'"]([^\'"]+)[\'"]\s*%}/',
+        function (array $matches) use ($values, $escapeHtml): string {
+            $includePath = sanitize_template_path($matches[1]);
+            $includeFile = TEMPLATE_PATH . '/' . $includePath;
+
+            if (!is_file($includeFile)) {
+                throw new RuntimeException("Included template not found: {$includePath}");
+            }
+
+            $content = file_get_contents($includeFile);
+
+            if ($content === false) {
+                throw new RuntimeException("Unable to read included template: {$includePath}");
+            }
+
+            return render_jinja_like($content, $values, $escapeHtml);
+        },
+        $template
+    );
+}
+
+function sanitize_template_path(string $path): string
+{
+    $path = str_replace('\\', '/', $path);
+    $path = ltrim($path, '/');
+
+    if (str_contains($path, '..')) {
+        throw new RuntimeException('Invalid template path.');
+    }
+
+    return $path;
+}
+function render_for_blocks(string $template, array $values, bool $escapeHtml): string
+{
+    $previous = null;
+
+    while ($previous !== $template) {
+        $previous = $template;
+
+        $template = preg_replace_callback(
+            '/{%\s*for\s+([a-zA-Z0-9_\-]+)\s+in\s+([a-zA-Z0-9_.\-]+)\s*%}(.*?){%\s*endfor\s*%}/s',
+            function (array $matches) use ($values, $escapeHtml): string {
+                $itemName = $matches[1];
+                $listName = $matches[2];
+                $block = $matches[3];
+
+                $list = resolve_template_value($values, $listName);
+
+                if (!is_array($list)) {
+                    return '';
+                }
+
+                $output = '';
+
+                foreach ($list as $index => $item) {
+                    $loopValues = $values;
+                    $loopValues[$itemName] = $item;
+                    $loopValues['loop'] = [
+                        'index' => $index + 1,
+                        'index0' => $index,
+                        'first' => $index === 0,
+                        'last' => $index === array_key_last($list),
+                    ];
+
+                    $output .= render_jinja_like($block, $loopValues, $escapeHtml);
+                }
+
+                return $output;
+            },
+            $template
+        );
+    }
+
+    return $template;
+}
+
+function resolve_template_value(array $values, string $key): mixed
+{
+    $parts = explode('.', $key);
+    $current = $values;
+
+    foreach ($parts as $part) {
+        if (is_array($current) && array_key_exists($part, $current)) {
+            $current = $current[$part];
+            continue;
+        }
+
+        return null;
+    }
+
+    return $current;
+}
+function render_if_blocks(string $template, array $values, bool $escapeHtml): string
+{
+    $previous = null;
+
+    while ($previous !== $template) {
+        $previous = $template;
+
+        $template = preg_replace_callback(
+            '/{%\s*if\s+([a-zA-Z0-9_.\-]+)\s*%}(.*?)(?:{%\s*else\s*%}(.*?))?{%\s*endif\s*%}/s',
+            function (array $matches) use ($values, $escapeHtml): string {
+                $key = $matches[1];
+                $ifBlock = $matches[2];
+                $elseBlock = $matches[3] ?? '';
+
+                return !empty(resolve_template_value($values, $key))
+                    ? render_jinja_like($ifBlock, $values, $escapeHtml)
+                    : render_jinja_like($elseBlock, $values, $escapeHtml);
+            },
+            $template
+        );
+    }
+
+    return $template;
+}
+
+function render_variables(string $template, array $values, bool $escapeHtml): string
+{
+    return preg_replace_callback(
+        '/{{\s*([a-zA-Z0-9_.\-]+)\s*}}/',
+        function (array $matches) use ($values, $escapeHtml): string {
+            $value = resolve_template_value($values, $matches[1]);
+
+            if (is_array($value)) {
+                $value = implode(', ', array_map('strval', $value));
+            }
+
+            $value = (string) ($value ?? '');
+
+            return $escapeHtml ? nl2br(e($value)) : $value;
+        },
+        $template
+    );
 }
