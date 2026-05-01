@@ -1,25 +1,18 @@
 <?php
+// includes/mailer.php
+
+declare(strict_types=1);
+
 require_once __DIR__ . '/vendor/phpmailer/PHPMailer.php';
 require_once __DIR__ . '/vendor/phpmailer/SMTP.php';
 require_once __DIR__ . '/vendor/phpmailer/Exception.php';
 
-use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
 
-/**
- * Send a welcome letter email
- *
- * @param array|string $to
- * @param array $cc
- * @param array $bcc
- * @param string $subject
- * @param string $htmlBody
- * @param string $plainBody
- * @param string $from
- * @param string $fromName
- * @param string|null $replyTo
- * @return bool
- */
+openlog('welcome-letters', LOG_PID | LOG_PERROR, LOG_MAIL);
+
 function send_welcome_letter(
     array|string $to,
     array $cc,
@@ -31,43 +24,60 @@ function send_welcome_letter(
     string $fromName,
     ?string $replyTo = null
 ): bool {
+
+    $requestId = bin2hex(random_bytes(6));
     $mail = new PHPMailer(true);
 
     try {
-        /**
-         * ---------------------------------------------------------------------
-         * SMTP CONFIG (EDIT THESE)
-         * ---------------------------------------------------------------------
-         */
+        $toList = normalize_email_array($to);
+        $ccList = normalize_email_array($cc);
+        $bccList = normalize_email_array($bcc);
+
+        if (!$toList) {
+            syslog(LOG_ERR, "[req:$requestId] No valid recipients.");
+            return false;
+        }
+
+        // SMTP CONFIG
         $mail->isSMTP();
-        $mail->Host       = SMTP_HOST;
-        $mail->Port       = SMTP_PORT;
-        $mail->SMTPAuth   = SMTP_AUTH;
-        $mail->Username   = SMTP_USER;
-        $mail->Password   = SMTP_PASS;
+        $mail->Host = SMTP_HOST ?: 'localhost';
+        $mail->Port = (int)SMTP_PORT ?: 25;
+        $mail->SMTPAuth = filter_var(SMTP_AUTH ?: 'false', FILTER_VALIDATE_BOOL);
 
-        // Encryption: tls (587) or ssl (465)
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        if ($mail->SMTPAuth) {
+            $mail->Username = SMTP_USER ?: '';
+            $mail->Password = SMTP_PASS ?: '';
+        }
 
-        // Enable UTF-8 / internationalized email (RFC 6531/6532)
+        $secure = strtolower(SMTP_SECURE ?: '');
+
+        if ($secure === 'ssl') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        } elseif ($secure === 'tls') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        } else {
+            $mail->SMTPSecure = false;
+            $mail->SMTPAutoTLS = false;
+        }
+
+        // DEBUG LOGGING
+        if (filter_var(SMTP_DEBUG?: 'false', FILTER_VALIDATE_BOOL)) {
+            $mail->SMTPDebug = SMTP::DEBUG_SERVER;
+            $mail->Debugoutput = function ($str, $level) use ($requestId) {
+                syslog(LOG_DEBUG, "[req:$requestId][SMTP:$level] " . trim($str));
+            };
+        }
+
+        // EMAIL SETTINGS
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
+        $mail->isHTML(true);
 
-        /**
-         * ---------------------------------------------------------------------
-         * HEADERS / ENVELOPE
-         * ---------------------------------------------------------------------
-         */
         $mail->setFrom($from, $fromName);
 
         if ($replyTo && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
             $mail->addReplyTo($replyTo);
         }
-
-        // Normalize recipients
-        $toList  = normalize_email_array($to);
-        $ccList  = normalize_email_array($cc);
-        $bccList = normalize_email_array($bcc);
 
         foreach ($toList as $addr) {
             $mail->addAddress($addr);
@@ -81,59 +91,40 @@ function send_welcome_letter(
             $mail->addBCC($addr);
         }
 
-        /**
-         * ---------------------------------------------------------------------
-         * MESSAGE BODY (RFC 2045 multipart/alternative)
-         * ---------------------------------------------------------------------
-         */
-        $mail->isHTML(true);
-        $mail->Subject = sanitize_header($subject);
-
-        $mail->Body    = build_html_document($htmlBody);
+        $mail->Subject = sanitize_mail_header($subject);
+        $mail->Body = wrap_html_email($htmlBody);
         $mail->AltBody = $plainBody;
 
-        /**
-         * ---------------------------------------------------------------------
-         * OPTIONAL: DEBUG LOGGING
-         * ---------------------------------------------------------------------
-         */
-        if (defined('DEBUG_MODE') && DEBUG_MODE === true) {
-            $mail->SMTPDebug = 0;
+        syslog(LOG_INFO, json_encode([
+            'event' => 'email_send_attempt',
+            'req' => $requestId,
+            'to' => $toList,
+            'subject' => $mail->Subject,
+        ]));
 
-            file_put_contents(
-                __DIR__ . '/../mail-debug.log',
-                "---- " . date('c') . " ----\n" .
-                "To: " . implode(',', $toList) . "\n" .
-                "CC: " . implode(',', $ccList) . "\n" .
-                "BCC: " . implode(',', $bccList) . "\n" .
-                "Subject: $subject\n\n",
-                FILE_APPEND
-            );
-        }
+        $mail->send();
 
-        /**
-         * ---------------------------------------------------------------------
-         * SEND
-         * ---------------------------------------------------------------------
-         */
-        return $mail->send();
+        syslog(LOG_INFO, json_encode([
+            'event' => 'email_send_success',
+            'req' => $requestId,
+            'to' => $toList,
+        ]));
+
+        return true;
 
     } catch (Exception $e) {
-        // Log error for debugging
-        file_put_contents(
-            __DIR__ . '/../mail-error.log',
-            "---- " . date('c') . " ----\n" .
-            $e->getMessage() . "\n\n",
-            FILE_APPEND
-        );
-
+        syslog(LOG_ERR, "[req:$requestId] Mail error: " . $mail->ErrorInfo);
+        return false;
+    } catch (Throwable $e) {
+        syslog(LOG_ERR, "[req:$requestId] Exception: " . $e->getMessage());
         return false;
     }
 }
 
-/**
- * Normalize email input to array of valid emails
+/*
+ * Helpers
  */
+
 function normalize_email_array(array|string|null $input): array
 {
     if ($input === null) return [];
@@ -142,42 +133,34 @@ function normalize_email_array(array|string|null $input): array
         $input = explode(',', $input);
     }
 
-    $valid = [];
+    $out = [];
 
     foreach ($input as $email) {
         $email = trim((string)$email);
-
-        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $valid[] = $email;
+        if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $out[] = $email;
         }
     }
 
-    return array_values(array_unique($valid));
+    return array_values(array_unique($out));
 }
 
-/**
- * Prevent header injection (RFC 5322 safety)
- */
-function sanitize_header(string $value): string
+function sanitize_mail_header(string $value): string
 {
     return trim(preg_replace('/[\r\n]+/', ' ', $value));
 }
 
-/**
- * Wrap HTML in a full document (better compatibility)
- */
-function build_html_document(string $body): string
+function wrap_html_email(string $html): string
 {
-    return <<<HTML
-<!doctype html>
+    if (stripos($html, '<html') !== false) {
+        return $html;
+    }
+
+    return "<!doctype html>
 <html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
+<head><meta charset=\"UTF-8\"></head>
 <body>
-$body
+$html
 </body>
-</html>
-HTML;
+</html>";
 }
