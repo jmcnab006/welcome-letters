@@ -324,3 +324,71 @@ function render_variables(string $template, array $values, bool $escapeHtml): st
         $template
     );
 }
+function apply_computed_values(array $letter, array $values): array
+{
+    foreach (($letter['computed'] ?? []) as $outputName => $config) {
+        $function = $config['function'] ?? null;
+        $args = $config['args'] ?? [];
+
+        if (!$function || !function_exists($function)) {
+            continue;
+        }
+
+        $resolvedArgs = [];
+
+        foreach ($args as $value) {
+            $resolvedArgs[] = is_string($value)
+                ? render_jinja_like($value, $values, false)
+                : $value;
+        }
+
+        $values[$outputName] = $function(...$resolvedArgs);
+    }
+
+    return $values;
+}
+
+function render_defaults(array $values): array
+{
+    $previous = null;
+
+    while ($previous !== $values) {
+        $previous = $values;
+
+        foreach ($values as $key => $value) {
+            if (is_string($value) && str_contains($value, '{{')) {
+                $values[$key] = render_jinja_like($value, $values, false);
+            }
+        }
+    }
+
+    return $values;
+}
+
+function parse_email_list(string|array|null $input): array
+{
+    if ($input === null) {
+        return [];
+    }
+
+    if (is_array($input)) {
+        return normalize_email_array($input);
+    }
+
+    // normalize delimiters: comma, semicolon, newline
+    $input = str_replace(["\r\n", "\r", ";"], "\n", $input);
+
+    $parts = preg_split('/[\n,]+/', $input);
+
+    $emails = [];
+
+    foreach ($parts as $email) {
+        $email = trim($email);
+
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $emails[] = $email;
+        }
+    }
+
+    return array_values(array_unique($emails));
+}

@@ -1,14 +1,15 @@
 # docker-compose.yml
 services:
-  welcome-letters:
+  letters:
     build: .
-    container_name: welcome-letters
+    container_name: welcome-letter
     restart: unless-stopped
     ports:
       - "8080:80"
     volumes:
-      - ./config/letters.php:/var/www/html/config/letters.php:ro
-      - ./config/config.php:/var/www/html/config/config.php:ro
-      - ./templates:/var/www/html/templates:ro
+      - ./app/config/default-config.php:/var/www/welcome-letters/app/config/default-config.php:ro
+      - ./app/config/letter-config.php:/var/www/welcome-letters/app/config/letter-config.php:ro
+      - ./app/config/letter-functions.php:/var/www/welcome-letters/app/config/letter-functions.php:ro
+      - ./app/templates:/var/www/welcome-letters/app/templates:ro
     environment:
       TZ: America/Chicago

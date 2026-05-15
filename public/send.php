@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-require __DIR__ . '/../includes/bootstrap.php';
+require __DIR__ . '/../app/includes/bootstrap.php';
 
 function fail_and_redirect(string $message, string $letterKey, array $oldInput = []): never
 {
@@ -85,7 +85,6 @@ if (!$letter) {
 }
 
 $submitted = [
-    'customer_email' => trim((string) ($_POST['customer_email'] ?? '')),
 ];
 
 foreach (($letter['fields'] ?? []) as $fieldName => $field) {
@@ -97,7 +96,7 @@ $submitted = apply_autofill_values($letter, $submitted);
 
 $errors = validate_letter_submission($letter, $submitted);
 
-if (!filter_var($submitted['customer_email'], FILTER_VALIDATE_EMAIL)) {
+if (!filter_var($submitted['to'], FILTER_VALIDATE_EMAIL)) {
     $errors[] = 'Customer Email must be a valid email address.';
 }
 
@@ -114,6 +113,10 @@ $templateValues = array_merge(
     ]
 );
 
+$templateValues = render_defaults($templateValues);
+// $templateValues = apply_autofill_values($letter, $templateValues);
+$templateValues = apply_computed_values($letter, $templateValues);
+
 try {
     $subject = render_subject_template($letter['subject'] ?? 'Welcome', $templateValues);
     $htmlBody = render_letter_template($letter['template'], $templateValues);
@@ -126,13 +129,18 @@ try {
     );
 }
 
-$to = normalize_email_list($letter['to'] ?? $submitted['customer_email']);
-$cc = normalize_email_list($letter['cc'] ?? []);
-$bcc = normalize_email_list($letter['bcc'] ?? []);
+//$to = normalize_email_list($letter['to'] ?? []);
+//$cc = normalize_email_list($letter['cc'] ?? []);
+//$bcc = normalize_email_list($letter['bcc'] ?? []);
+
+$to = parse_email_list($submitted['to'] ?? '');
+$cc = parse_email_list($submitted['cc'] ?? '');
+$bcc = parse_email_list($submitted['bcc'] ?? '');
 
 if (!$to) {
-    $to = [$submitted['customer_email']];
+    fail_and_redirect('At least one To address is required.', $letterKey, $submitted);
 }
+
 
 if ($action === 'preview') {
     $_SESSION['preview'] = [

@@ -3,9 +3,9 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/vendor/phpmailer/PHPMailer.php';
-require_once __DIR__ . '/vendor/phpmailer/SMTP.php';
-require_once __DIR__ . '/vendor/phpmailer/Exception.php';
+require_once __DIR__ . '/../vendors/phpmailer/PHPMailer.php';
+require_once __DIR__ . '/../vendors/phpmailer/SMTP.php';
+require_once __DIR__ . '/../vendors/phpmailer/Exception.php';
 
 use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\PHPMailer;

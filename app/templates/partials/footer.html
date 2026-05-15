@@ -18,7 +18,9 @@
                 </a>
             </p>
             {% endif %}
-
+            {% if sent_datetime %}
+            <p style="margin-top: 2px; color: #888;font-size: 10px">Sent: {{ sent_datetime }}</p>
+            {% endif %}
         </td>
     </tr>
 
