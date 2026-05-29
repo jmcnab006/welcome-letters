@@ -1,3 +1,5 @@
+{% include "partials/header.html" %}
+
 <h2>Welcome {{ customer_name }}!</h2>
 
 <p>Your DNS hosting service has been successfully provisioned.</p>
@@ -26,11 +28,4 @@
 {% endif %}
 
 <hr>
-
-<p>
-    Need help? Contact us at
-    <a href="mailto:{{ support_email }}">{{ support_email }}</a>
-    or call {{ support_phone }}.
-</p>
-
-<p>— {{ company_name }}</p>
+{% include "partials/footer.html" %}

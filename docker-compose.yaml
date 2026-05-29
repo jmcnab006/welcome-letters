@@ -2,7 +2,7 @@
 services:
   letters:
     build: .
-    container_name: welcome-letter
+    container_name: welcome 
     restart: unless-stopped
     ports:
       - "8080:80"

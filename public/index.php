@@ -31,7 +31,7 @@ foreach ($letters as $key => $letter) {
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="assets/style.css">
 </head>
 
 <body>
@@ -39,7 +39,7 @@ foreach ($letters as $key => $letter) {
 
     <aside class="sidebar">
         <h1><?= e(APP_TITLE) ?></h1>
-        <p class="subtitle">Welcome letters and customer setup emails</p>
+        <p class="subtitle"><?= e(APP_DESCRIPTION) ?></p>
 
         <?php foreach ($lettersByCategory as $category => $categoryLetters): ?>
             <section class="category">

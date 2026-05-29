@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 session_start();
 
-const APP_TITLE = 'Welcome Letter Webform';
+// const APP_TITLE = 'Welcome Letter Webform';
 
 const BASE_PATH = __DIR__ . '/..';
 const CONFIG_PATH = BASE_PATH . '/config';
